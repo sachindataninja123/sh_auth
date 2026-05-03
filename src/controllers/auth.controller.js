@@ -37,16 +37,25 @@ export const registerController = async (req, res) => {
       password: hashPassword,
     });
 
-    const token = jwt.sign({ id: user._id }, config.JWT_SECRET, {
-      expiresIn: "1d",
+    const accessToken = jwt.sign({ id: user._id }, config.JWT_SECRET, {
+      expiresIn: "15m",
     });
 
-    res.cookie("token", token);
+    const refreshToken = jwt.sign({ id: user._id }, config.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
 
     return res.status(201).json({
       message: "User Registered successfully!",
       user,
-      token,
+      accessToken: accessToken,
     });
   } catch (error) {
     console.error(`[ERROR]: ${error.message}`);
@@ -78,6 +87,48 @@ export const getMe = async (req, res) => {
         username: user.username,
         email: user.email,
       },
+    });
+  } catch (error) {
+    console.error(`[ERROR]: ${error.message}`);
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Something went wrong",
+    });
+  }
+};
+
+export const refreshToken = async (req, res) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!refreshToken) {
+      return res.status(401).json({
+        message: "RefreshToken is not found!",
+        success: false,
+      });
+    }
+
+    const decoded = jwt.verify(refreshToken, config.JWT_SECRET);
+
+    const accessToken = jwt.sign({ id: decoded.id }, config.JWT_SECRET, {
+      expiresIn: "15m",
+    });
+
+    refreshToken = jwt.sign({ id: decoded.id }, config.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    return res.status(201).json({
+      message: "Access Token refreshed successfully",
+      accessToken,
     });
   } catch (error) {
     console.error(`[ERROR]: ${error.message}`);
