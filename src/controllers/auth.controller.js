@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import config from "../config/config.js";
 import sessionModel from "../models/session.model.js";
+import { sendEmail } from "../services/email.service.js";
 
 export const registerController = async (req, res) => {
   try {
@@ -36,39 +37,41 @@ export const registerController = async (req, res) => {
       password: hashPassword,
     });
 
-    // 1. create session first (without refreshTokenHash)
-    const session = await sessionModel.create({
-      user: user._id,
-      refreshTokenHash: "placeholder", // temporary
-      ip: req.ip,
-      userAgent: req.headers["user-agent"],
-    });
+    await sendEmail(email)
 
-    // 2. now generate tokens with session._id available
-    const refreshToken = jwt.sign(
-      { id: user._id, sessionId: session._id },
-      config.JWT_REFRESH_SECRET,
-      { expiresIn: "7d" },
-    );
+    // // 1. create session first (without refreshTokenHash)
+    // const session = await sessionModel.create({
+    //   user: user._id,
+    //   refreshTokenHash: "placeholder", // temporary
+    //   ip: req.ip,
+    //   userAgent: req.headers["user-agent"],
+    // });
 
-    const accessToken = jwt.sign(
-      { id: user._id, sessionId: session._id },
-      config.JWT_SECRET,
-      { expiresIn: "15m" },
-    );
+    // // 2. now generate tokens with session._id available
+    // const refreshToken = jwt.sign(
+    //   { id: user._id, sessionId: session._id },
+    //   config.JWT_REFRESH_SECRET,
+    //   { expiresIn: "7d" },
+    // );
 
-    // 3. hash refresh token and update session
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-    session.refreshTokenHash = refreshTokenHash;
-    await session.save();
+    // const accessToken = jwt.sign(
+    //   { id: user._id, sessionId: session._id },
+    //   config.JWT_SECRET,
+    //   { expiresIn: "15m" },
+    // );
 
-    // set refresh token cookie
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    // // 3. hash refresh token and update session
+    // const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+    // session.refreshTokenHash = refreshTokenHash;
+    // await session.save();
+
+    // // set refresh token cookie
+    // res.cookie("refreshToken", refreshToken, {
+    //   httpOnly: true,
+    //   secure: true,
+    //   sameSite: "strict",
+    //   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    // });
 
     return res.status(201).json({
       message: "User registered successfully!",
@@ -76,8 +79,8 @@ export const registerController = async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email,
+        verified: user.verified,
       },
-      accessToken,
     });
   } catch (error) {
     console.error(`[ERROR]: ${error.message}`);
@@ -131,13 +134,13 @@ export const login = async (req, res) => {
     const refreshToken = jwt.sign(
       { id: user._id, sessionId: session._id },
       config.JWT_REFRESH_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     const accessToken = jwt.sign(
       { id: user._id, sessionId: session._id },
       config.JWT_SECRET,
-      { expiresIn: "15m" }
+      { expiresIn: "15m" },
     );
 
     // 3. hash refresh token and update session
