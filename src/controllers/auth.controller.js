@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import config from "../config/config.js";
 import sessionModel from "../models/session.model.js";
 import { sendEmail } from "../services/email.service.js";
+import { generateOtp, generateOtpHtml } from "../utils/utils.js";
+import otpModel from "../models/otp.model.js";
 
 export const registerController = async (req, res) => {
   try {
@@ -37,41 +39,18 @@ export const registerController = async (req, res) => {
       password: hashPassword,
     });
 
-    await sendEmail(email)
+    const otp = generateOtp();
+    const html = generateOtpHtml(otp, username);
 
-    // // 1. create session first (without refreshTokenHash)
-    // const session = await sessionModel.create({
-    //   user: user._id,
-    //   refreshTokenHash: "placeholder", // temporary
-    //   ip: req.ip,
-    //   userAgent: req.headers["user-agent"],
-    // });
+    const otpHash = await bcrypt.hash(otp, 10);
 
-    // // 2. now generate tokens with session._id available
-    // const refreshToken = jwt.sign(
-    //   { id: user._id, sessionId: session._id },
-    //   config.JWT_REFRESH_SECRET,
-    //   { expiresIn: "7d" },
-    // );
+    await otpModel.create({
+      email,
+      user: user._id,
+      otpHash,
+    });
 
-    // const accessToken = jwt.sign(
-    //   { id: user._id, sessionId: session._id },
-    //   config.JWT_SECRET,
-    //   { expiresIn: "15m" },
-    // );
-
-    // // 3. hash refresh token and update session
-    // const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-    // session.refreshTokenHash = refreshTokenHash;
-    // await session.save();
-
-    // // set refresh token cookie
-    // res.cookie("refreshToken", refreshToken, {
-    //   httpOnly: true,
-    //   secure: true,
-    //   sameSite: "strict",
-    //   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    // });
+    await sendEmail(email, "OTP Verification", `Your OTP code is ${otp}`, html);
 
     return res.status(201).json({
       message: "User registered successfully!",
@@ -109,6 +88,11 @@ export const login = async (req, res) => {
       return res.status(401).json({
         message: "Invalid email or password",
         success: false,
+      });
+    }
+    if (!user.verified) {
+      return res.status(401).json({
+        message: "Email not verified",
       });
     }
 
@@ -353,6 +337,53 @@ export const logoutAll = async (req, res) => {
 
     return res.status(200).json({
       message: "Logged out from all devices successfully",
+    });
+  } catch (error) {
+    console.error(`[ERROR]: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Something went wrong",
+    });
+  }
+};
+
+export const verifyEmail = async (req, res) => {
+  try {
+    const { otp, email } = req.body;
+
+    const otpDoc = await otpModel.findOne({ email });
+
+    if (!otpDoc) {
+      return res.status(400).json({
+        message: "OTP not found",
+      });
+    }
+
+    const isValid = await bcrypt.compare(otp, otpDoc.otpHash);
+
+    if (!isValid) {
+      return res.status(400).json({
+        message: "Invalid OTP",
+      });
+    }
+
+    const user = await userModel.findByIdAndUpdate(
+      otpDoc.user,
+      { verified: true },
+      { new: true }, // important
+    );
+
+    await otpModel.deleteMany({
+      user: otpDoc.user,
+    });
+
+    return res.status(200).json({
+      message: "Email verified successfully",
+      user: {
+        username: user.username,
+        email: user.email,
+        verified: user.verified,
+      },
     });
   } catch (error) {
     console.error(`[ERROR]: ${error.message}`);

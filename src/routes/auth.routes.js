@@ -6,6 +6,7 @@ import {
   logoutAll,
   refreshToken,
   registerController,
+  verifyEmail,
 } from "../controllers/auth.controller.js";
 
 const authRouter = express.Router();
@@ -14,7 +15,7 @@ const authRouter = express.Router();
 authRouter.post("/register", registerController);
 
 //POST /api/get/login
-authRouter.post("/login" , login)
+authRouter.post("/login", login);
 
 //GET /api/auth/get-me
 authRouter.get("/get-me", getMe);
@@ -27,5 +28,8 @@ authRouter.get("/logout", logout);
 
 //GET /api/auth/logout-all
 authRouter.get("/logout-all", logoutAll);
+
+//POST /api/auth/verify-email
+authRouter.post("/verify-email", verifyEmail);
 
 export default authRouter;
